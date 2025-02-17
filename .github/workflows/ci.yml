@@ -10,34 +10,26 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_DB: workwise_db
-          POSTGRES_USER: workwise_user
-          POSTGRES_PASSWORD: asd123
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Build Docker image
+        run: docker build -t workwise-web:latest -f web/Dockerfile web/
 
-      - name: Build Docker image for web service
-        run: docker build -t workwise-web:latest -f web/Dockerfile .
+      - name: Start DB service using docker-compose
+        run: docker-compose -f docker-compose.yml up -d db
 
-      - name: Run migrations and tests
+      - name: Wait for Postgres to be ready
         run: |
-          # Run migrations
-          docker run --rm workwise-web:latest python manage.py migrate
-          # Run your tests (adjust command if needed)
-          docker run --rm workwise-web:latest python manage.py test
+          echo "Waiting for Postgres service..."
+          sleep 15
+
+      - name: Run Django migrations
+        run: docker-compose -f docker-compose.yml run --rm web python manage.py migrate
+
+      - name: Run Django tests
+        run: docker-compose -f docker-compose.yml run --rm web python manage.py test
+
+      - name: Tear down services
+        run: docker-compose -f docker-compose.yml down
